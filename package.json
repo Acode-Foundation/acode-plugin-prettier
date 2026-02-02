@@ -1,16 +1,16 @@
 {
   "name": "acode-plugin-prettier",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Acode plugin to format code",
   "main": "dist/main.js",
   "repository": "https://github.com/deadlyjack/acode-plugin-prettier.git",
   "author": "Ajit <me@ajitkumar.dev>",
   "license": "MIT",
   "dependencies": {
+    "@ngrok/ngrok": "^1.4.0",
     "@types/js-yaml": "^4.0.7",
     "html-tag-js": "^1.1.41",
     "js-yaml": "^4.1.0",
-    "live-server": "^1.2.2",
     "prettier": "^3.0.2",
     "toml": "^3.0.0"
   },

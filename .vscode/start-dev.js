@@ -1,6 +1,5 @@
-/* eslint-disable no-console */
-const { fork, spawn } = require('child_process');
-const path = require('path');
+const { fork } = require('node:child_process');
+const path = require('node:path');
 
 main();
 
