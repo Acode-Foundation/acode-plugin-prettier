@@ -9,7 +9,7 @@
   "dependencies": {
     "@types/js-yaml": "^4.0.7",
     "html-tag-js": "^1.1.41",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.1.1",
     "live-server": "^1.2.2",
     "prettier": "^3.0.2",
     "toml": "^3.0.0"
