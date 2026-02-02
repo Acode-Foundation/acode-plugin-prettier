@@ -1,3 +1,4 @@
 node_modules
 test.mjs
 dist.zip
+dist/

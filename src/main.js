@@ -344,13 +344,20 @@ class AcodePrettier {
 
     #setValue(file, formattedCode) {
         const { session } = file;
-        const { $undoStack, $redoStack, $rev, $mark } = Object.assign({}, session.getUndoManager());
-        session.setValue(formattedCode.formatted);
-        const undoManager = session.getUndoManager();
-        undoManager.$undoStack = $undoStack;
-        undoManager.$redoStack = $redoStack;
-        undoManager.$rev = $rev;
-        undoManager.$mark = $mark;
+
+        // Get the full document range
+        const lastRow = session.getLength() - 1;
+        const lastColumn = session.getLine(lastRow).length;
+        const fullRange = {
+            start: { row: 0, column: 0 },
+            end: { row: lastRow, column: lastColumn }
+        };
+
+        // Replace the entire document content
+        // This preserves editor state better than setValue()
+        session.replace(fullRange, formattedCode.formatted);
+
+        // Restore cursor position
         session.selection.moveCursorToPosition(this.#cursorOffsetToCursorPos(formattedCode.cursorOffset));
         this.#removeErrors(file.id);
     }
