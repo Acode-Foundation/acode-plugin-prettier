@@ -1,6 +1,6 @@
 # Acode Plugin: Prettier
 
-![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.2-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 Prettier is an opinionated code formatter that enforces a consistent style across your codebase. It automatically formats your code by parsing it and re-printing it with its own rules, taking the maximum line length into account and wrapping code when necessary.
