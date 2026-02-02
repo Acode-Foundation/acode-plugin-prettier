@@ -104,6 +104,19 @@ class AcodePrettier {
             case "yml":
                 return "yaml";
 
+            case "graphql":
+            case "gql":
+                return "graphql";
+
+            case "mdx":
+                return "mdx";
+
+            case "xml":
+                return "xml";
+
+            case "json5":
+                return "json5";
+
             default:
                 return ext;
         }
@@ -141,11 +154,16 @@ class AcodePrettier {
             "tsx",
             "vue",
             "json",
+            "json5",
             "hbs",
             "handlebars",
             "md",
+            "mdx",
             "yaml",
             "yml",
+            "graphql",
+            "gql",
+            "xml",
         ];
 
         acode.registerFormatter(pluginId, extensions, this.run);
