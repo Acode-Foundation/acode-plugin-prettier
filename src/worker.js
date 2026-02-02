@@ -3,7 +3,7 @@ import prettierPlugins from './prettierPlugins';
 
 
 self.onmessage = async (e) => {
-    const { id, code, cursorOptions, action, scriptUrl } = e.data;
+    const { id, code, cursorOptions, action, scriptUrl, isSelection, selectionRange } = e.data;
     if (action === "load script") {
         importScripts(scriptUrl);
         self.postMessage({ action: "script loaded" });
@@ -12,8 +12,11 @@ self.onmessage = async (e) => {
 
     cursorOptions.plugins = prettierPlugins;
     try {
-        const res = await prettier.formatWithCursor(code, cursorOptions);
-        self.postMessage({ id, action: "code format", res });
+        // For selections, use format() instead of formatWithCursor()
+        const res = isSelection
+            ? await prettier.format(code, cursorOptions)
+            : await prettier.formatWithCursor(code, cursorOptions);
+        self.postMessage({ id, action: "code format", res, isSelection, selectionRange });
     } catch (error) {
         self.postMessage({ id, action: "code format", error });
     }

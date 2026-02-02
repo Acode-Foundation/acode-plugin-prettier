@@ -1,8 +1,8 @@
-import plugin from "../plugin.json";
-import yaml from "js-yaml";
-import toml from "toml";
 import tag from 'html-tag-js';
+import yaml from "js-yaml";
 import prettier from "prettier/standalone";
+import toml from "toml";
+import plugin from "../plugin.json";
 import prettierPlugins from './prettierPlugins';
 
 const pluginId = plugin.id;
@@ -104,6 +104,19 @@ class AcodePrettier {
             case "yml":
                 return "yaml";
 
+            case "graphql":
+            case "gql":
+                return "graphql";
+
+            case "mdx":
+                return "mdx";
+
+            case "xml":
+                return "xml";
+
+            case "json5":
+                return "json5";
+
             default:
                 return ext;
         }
@@ -141,11 +154,16 @@ class AcodePrettier {
             "tsx",
             "vue",
             "json",
+            "json5",
             "hbs",
             "handlebars",
             "md",
+            "mdx",
             "yaml",
             "yml",
+            "graphql",
+            "gql",
+            "xml",
         ];
 
         acode.registerFormatter(pluginId, extensions, this.run);
@@ -184,6 +202,54 @@ class AcodePrettier {
         }
     }
 
+    async runSelection() {
+        const { editor, activeFile } = editorManager;
+        const selection = editor.getSelection();
+        const range = selection.getRange();
+
+        // If no selection, format entire document
+        if (selection.isEmpty() || (range.start.row === range.end.row && range.start.column === range.end.column)) {
+            return this.run();
+        }
+
+        const parser = AcodePrettier.inferParser(activeFile.name);
+        const configFile = await this.#getConfigFile(activeFile);
+        const prettierOptions = configFile || this.prettierOptions;
+
+        // Get full-line selection range
+        const code = editor.getValue();
+        const { selectionRange, selectedText } = this.#getSelectionText(selection, code);
+
+        // Format only the selected text (not the entire document)
+        const cursorOptions = {
+            parser,
+            filepath: activeFile.name,
+            ...prettierOptions,
+            // Don't use rangeStart/rangeEnd - format the selection as a standalone snippet
+            rangeStart: 0,
+            rangeEnd: Infinity,
+        };
+
+        if (typeof Worker !== "undefined") {
+            this.worker.postMessage({
+                id: activeFile.id,
+                code: selectedText,
+                cursorOptions,
+                isSelection: true,
+                selectionRange,
+            });
+            return;
+        }
+
+        cursorOptions.plugins = prettierPlugins;
+        try {
+            const res = await prettier.format(selectedText, cursorOptions);
+            this.#setValueForSelection(activeFile, res, selectionRange);
+        } catch (error) {
+            this.#showError(activeFile.id, error);
+        }
+    }
+
     destroy() {
         this.#sideButton?.hide();
         this.#page?.hide();
@@ -202,16 +268,47 @@ class AcodePrettier {
     }
 
     #cursorPosToCursorOffset(cursorPos) {
-        let { row, column } = cursorPos;
+        return this.#positionToOffset(cursorPos);
+    }
+
+    #positionToOffset(position) {
+        let { row, column } = position;
         const { editor } = editorManager;
         const lines = editor.getValue().split("\n");
 
         for (let i = 0; i < row; ++i) {
-            if (i < row) {
-                column += lines[i].length + 1; // +1 for newline character
-            }
+            column += lines[i].length + 1; // +1 for newline character
         }
         return column;
+    }
+
+    #getSelectionText(selection, code) {
+        const range = selection.getRange();
+        const lines = code.split("\n");
+
+        // Expand to full lines
+        const startRow = range.start.row;
+        let endRow = range.end.row;
+
+        // If selection ends at column 0, don't include that line
+        if (range.end.column === 0 && endRow > startRow) {
+            endRow--;
+        }
+
+        // Ensure endRow is within bounds
+        endRow = Math.min(endRow, lines.length - 1);
+
+        // Store the actual selection range for replacement
+        const selectionRange = {
+            start: { row: startRow, column: 0 },
+            end: { row: endRow, column: lines[endRow]?.length ?? 0 }
+        };
+
+        // Extract the selected lines
+        const selectedLines = lines.slice(startRow, endRow + 1);
+        const selectedText = selectedLines.join("\n");
+
+        return { selectionRange, selectedText };
     }
 
     #cursorOffsetToCursorPos(cursorOffset) {
@@ -239,7 +336,7 @@ class AcodePrettier {
     #initializeWorker() {
         this.worker = new Worker(new URL("./worker.js", import.meta.url));
         this.worker.onmessage = (e) => {
-            const { id, res, error, action } = e.data;
+            const { id, res, error, action, isSelection, selectionRange } = e.data;
             if (action === "script loaded") {
                 this.workerInitialized = true;
                 return;
@@ -254,21 +351,52 @@ class AcodePrettier {
                 const file = editorManager.getFile(id, "id");
                 if (!file) return;
 
-                this.#setValue(file, res);
+                if (isSelection && selectionRange) {
+                    this.#setValueForSelection(file, res, selectionRange);
+                } else {
+                    this.#setValue(file, res);
+                }
             }
         };
     }
 
     #setValue(file, formattedCode) {
         const { session } = file;
-        const { $undoStack, $redoStack, $rev, $mark } = Object.assign({}, session.getUndoManager());
-        session.setValue(formattedCode.formatted);
-        const undoManager = session.getUndoManager();
-        undoManager.$undoStack = $undoStack;
-        undoManager.$redoStack = $redoStack;
-        undoManager.$rev = $rev;
-        undoManager.$mark = $mark;
+
+        // Get the full document range
+        const lastRow = session.getLength() - 1;
+        const lastColumn = session.getLine(lastRow).length;
+        const fullRange = {
+            start: { row: 0, column: 0 },
+            end: { row: lastRow, column: lastColumn }
+        };
+
+        // Replace the entire document content
+        // This preserves editor state better than setValue()
+        session.replace(fullRange, formattedCode.formatted);
+
+        // Restore cursor position
         session.selection.moveCursorToPosition(this.#cursorOffsetToCursorPos(formattedCode.cursorOffset));
+        this.#removeErrors(file.id);
+    }
+
+    #setValueForSelection(file, formattedText, selectionRange) {
+        const { session } = file;
+
+        // For selection formatting, the result is either a string (from prettier.format)
+        // or an object with 'formatted' property (from formatWithCursor)
+        let formatted = typeof formattedText === 'string' ? formattedText : formattedText.formatted;
+
+        // Remove trailing newline added by Prettier
+        if (formatted.endsWith('\n')) {
+            formatted = formatted.slice(0, -1);
+        }
+
+        // Replace only the selected range
+        session.replace(selectionRange, formatted);
+
+        // Clear selection after formatting
+        session.selection.clearSelection();
         this.#removeErrors(file.id);
     }
 
@@ -280,7 +408,7 @@ class AcodePrettier {
     #showError(fileId, error) {
         const message = error.message;
         const now = new Date();
-        const localDateTime = now.toLocaleDateString() + " " + now.toLocaleTimeString();
+        const localDateTime = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
         const [line, column] = message.match(/\d+:\d+/)?.[0]?.split(':') || [];
         const file = editorManager.getFile(fileId, 'id');
         const $error = tag('div', {
@@ -307,10 +435,10 @@ class AcodePrettier {
 </div>`,
         });
         this.#sideButton?.show();
-        this.#page.append($error);
+        this.#page.prepend($error);
 
         if (this.#page.childElementCount > 10) {
-            this.#page.firstChild.remove();
+            this.#page.lastChild.remove();
         }
 
         if (this.prettierOptions.openErrorPageOnErrors) {
@@ -330,7 +458,9 @@ class AcodePrettier {
 
     #removeErrors(fileId) {
         const $errors = this.#page.getAll(`[data-file="${fileId}"]`);
-        $errors.forEach($error => $error.remove());
+        for (const $error of $errors) {
+            $error.remove();
+        }
         if (!this.#page.get('[data-type=error')) {
             this.#sideButton?.hide();
         }
@@ -396,6 +526,7 @@ class AcodePrettier {
                 const text = await fs(configFile).readFile('utf-8');
                 const regex = /export\s+default(\s+const\s+\w+\s*=(?!=)|(?!\s+const\b))/;
                 const addToWindow = text.replace(regex, "window.prettierConfig = ");
+                // biome-ignore lint/security/noGlobalEval: trusted file
                 const prettierConfig = eval(addToWindow);
                 delete window.prettierConfig;
                 return prettierConfig;
@@ -406,6 +537,7 @@ class AcodePrettier {
                 const text = await fs(configFile).readFile('utf-8');
                 const regex = /module\.exports\s*=\s*(\s+const\s+\w+\s*=(?!=)|(?!\s+const\b))/;
                 const addToWindow = text.replace(regex, "window.prettierConfig = ");
+                // biome-ignore lint/security/noGlobalEval: trusted file
                 const prettierConfig = eval(addToWindow);
                 delete window.prettierConfig;
                 return prettierConfig;
@@ -415,6 +547,12 @@ class AcodePrettier {
 
     get commands() {
         return [
+            {
+                name: "Prettier: Format Selection",
+                description: "Format the selection/all with Prettier.",
+                bindKey: { win: "Ctrl-Shift-F", mac: "Cmd-Shift-F" },
+                exec: () => this.runSelection(),
+            },
             {
                 name: "Prettier Logs",
                 description: "View logs of prettier errors.",
