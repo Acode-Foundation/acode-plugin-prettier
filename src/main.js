@@ -277,10 +277,13 @@ class AcodePrettier {
             endRow--;
         }
 
+        // Ensure endRow is within bounds
+        endRow = Math.min(endRow, lines.length - 1);
+
         // Store the actual selection range for replacement
         const selectionRange = {
             start: { row: startRow, column: 0 },
-            end: { row: endRow, column: lines[endRow].length }
+            end: { row: endRow, column: lines[endRow]?.length ?? 0 }
         };
 
         // Extract the selected lines
@@ -407,10 +410,10 @@ class AcodePrettier {
 </div>`,
         });
         this.#sideButton?.show();
-        this.#page.append($error);
+        this.#page.prepend($error);
 
         if (this.#page.childElementCount > 10) {
-            this.#page.firstChild.remove();
+            this.#page.lastChild.remove();
         }
 
         if (this.prettierOptions.openErrorPageOnErrors) {
