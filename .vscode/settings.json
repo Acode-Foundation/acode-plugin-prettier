@@ -1,22 +1,4 @@
 {
-  "liveServer.settings.https": {
-    "enable": true, //set it true to enable the feature.
-    "cert": "D:/Github/deadlyjack/acode-plugin-prettier/.vscode/server.crt",
-    "key": "D:/Github/deadlyjack/acode-plugin-prettier/.vscode/server.key",
-    "passphrase": "1234"
-  },
-  "cSpell.words": [
-    "acode",
-    "Aspree",
-    "deadlyjack",
-    "espree",
-    "estree",
-    "Meriyah",
-    "onhide",
-    "settitle",
-    "warningreport",
-    "whitespaces"
-  ],
   "editor.codeActionsOnSave": {
     "quickFix.biome": "explicit",
     "source.organizeImports.biome": "explicit"
